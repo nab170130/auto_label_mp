@@ -192,8 +192,6 @@ class SMIAutoLabeler(Strategy):
 
         selected_idx = worker_pool.starmap(parallel_select, process_argument_list)
 
-        print(selected_idx)
-
         for i in range(self.target_classes):
             for j in range(i+1, self.target_classes):
                 self._resolve_conflicts(selected_idx[i],selected_idx[j])
