@@ -191,6 +191,7 @@ class SMIAutoLabeler(Strategy):
             process_argument_list.append((class_num, budget, self.target_classes, len(unlabeled_data_embedding), len(query_embedding), data_sijs, query_sijs, query_query_sijs, self.args))
 
         selected_idx = worker_pool.starmap(parallel_select, process_argument_list)
+        worker_pool.close()
 
         for i in range(self.target_classes):
             for j in range(i+1, self.target_classes):
