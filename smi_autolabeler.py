@@ -85,7 +85,7 @@ class SMIAutoLabeler(Strategy):
         super(SMIAutoLabeler, self).__init__(labeled_dataset, unlabeled_dataset, net, nclasses, args)        
         self.query_dataset = query_dataset
         if "thread_count" not in args:
-            args["thread_count"] = 5
+            args["thread_count"] = 2
 
     def _resolve_conflicts(self, greedy_list1, greedy_list2):
 
