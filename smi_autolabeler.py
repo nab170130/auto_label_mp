@@ -3,7 +3,7 @@ from torch.utils.data import DataLoader, Subset
 
 import gc
 import math
-import multiprocessing as mp
+import torch.multiprocessing as mp
 import submodlib
 import torch
 
@@ -23,77 +23,53 @@ def get_class_subset(dataset, class_to_retrieve, batch_size=64):
 
     return Subset(dataset, subset_idxs)
 
-def parallel_select(self_strategy, class_num, budget, data_sijs, unlabeled_data_embedding):
+def parallel_select(class_num, budget, target_classes, num_data, num_queries, data_sijs, query_sijs, query_query_sijs, args):
     
     with open(F"/content/select{class_num}", "w") as f:
         f.write("heeey")
     
     # Get hyperparameters from args dict
-    optimizer = self_strategy.args['optimizer'] if 'optimizer' in self_strategy.args else 'NaiveGreedy'
-    metric = self_strategy.args['metric'] if 'metric' in self_strategy.args else 'cosine'
-    eta = self_strategy.args['eta'] if 'eta' in self_strategy.args else 1
-    gradType = self_strategy.args['gradType'] if 'gradType' in self_strategy.args else "bias_linear"
-    stopIfZeroGain = self_strategy.args['stopIfZeroGain'] if 'stopIfZeroGain' in self_strategy.args else False
-    stopIfNegativeGain = self_strategy.args['stopIfNegativeGain'] if 'stopIfNegativeGain' in self_strategy.args else False
-    verbose = self_strategy.args['verbose'] if 'verbose' in self_strategy.args else False
-    embedding_type = self_strategy.args['embedding_type'] if 'embedding_type' in self_strategy.args else "gradients"
-    if(embedding_type=="features"):
-        layer_name = self_strategy.args['layer_name'] if 'layer_name' in self_strategy.args else "avgpool"
+    optimizer = args['optimizer'] if 'optimizer' in args else 'NaiveGreedy'
+    metric = args['metric'] if 'metric' in args else 'cosine'
+    eta = args['eta'] if 'eta' in args else 1
+    stopIfZeroGain = args['stopIfZeroGain'] if 'stopIfZeroGain' in args else False
+    stopIfNegativeGain = args['stopIfNegativeGain'] if 'stopIfNegativeGain' in args else False
+    verbose = args['verbose'] if 'verbose' in args else False
 
     # Calculate the class budget to use in this selection
-    budgets_to_use = [(budget * i) // self_strategy.target_classes for i in range(self_strategy.target_classes + 1)]
+    budgets_to_use = [(budget * i) // target_classes for i in range(target_classes + 1)]
     class_budget = budgets_to_use[class_num + 1] - budgets_to_use[class_num]
 
-    # Get all points in the query set that have sel_class as a label
-    query_class_subset = get_class_subset(self_strategy.query_dataset, class_num)
-
-    # Compute the feature embedding of this subset
-    if(embedding_type == "gradients"):
-        query_embedding = self_strategy.get_grad_embedding(query_class_subset, False, gradType)
-    elif(embedding_type == "features"):
-        query_embedding = self_strategy.get_feature_embedding(query_class_subset, False, layer_name)
-    else:
-        raise ValueError("Provided representation must be one of gradients or features")
-
-    # Compute query-query kernel for LogDetMI if applicable
-    if(self_strategy.args['smi_function']=='logdetmi'):
-        query_query_sijs = submodlib.helper.create_kernel(X=query_embedding.cpu().numpy(), metric=metric, method="sklearn")
-    else:
-        query_query_sijs = None
-
-    # Compute image-query kernel. Always needed.
-    query_sijs = submodlib.helper.create_kernel(X=query_embedding.cpu().numpy(), X_rep=unlabeled_data_embedding.cpu().numpy(), metric=metric, method="sklearn")
-
-
-    if(self_strategy.args['smi_function']=='fl1mi'):
-        obj = submodlib.FacilityLocationMutualInformationFunction(n=unlabeled_data_embedding.shape[0],
-                                                                  num_queries=query_embedding.shape[0], 
+    if(args['smi_function']=='fl1mi'):
+        obj = submodlib.FacilityLocationMutualInformationFunction(n=num_data,
+                                                                  num_queries=num_queries, 
                                                                   data_sijs=data_sijs , 
                                                                   query_sijs=query_sijs, 
                                                                   magnificationEta=eta)
 
-    if(self_strategy.args['smi_function']=='fl2mi'):
-        obj = submodlib.FacilityLocationVariantMutualInformationFunction(n=unlabeled_data_embedding.shape[0],
-                                                                  num_queries=query_embedding.shape[0], 
+    if(args['smi_function']=='fl2mi'):
+        obj = submodlib.FacilityLocationVariantMutualInformationFunction(n=num_data,
+                                                                  num_queries=num_queries, 
                                                                   query_sijs=query_sijs, 
                                                                   queryDiversityEta=eta)
     
-    if(self_strategy.args['smi_function']=='com'):
+    if(args['smi_function']=='com'):
         from submodlib_cpp import ConcaveOverModular
-        obj = submodlib.ConcaveOverModularFunction(n=unlabeled_data_embedding.shape[0],
-                                                                  num_queries=query_embedding.shape[0], 
-                                                                  query_sijs=query_sijs, 
-                                                                  queryDiversityEta=eta,
-                                                                  mode=ConcaveOverModular.logarithmic)
-    if(self_strategy.args['smi_function']=='gcmi'):
-        obj = submodlib.GraphCutMutualInformationFunction(n=unlabeled_data_embedding.shape[0],
-                                                                  num_queries=query_embedding.shape[0],
-                                                                  query_sijs=query_sijs, 
-                                                                  metric=metric)
-    if(self_strategy.args['smi_function']=='logdetmi'):
-        lambdaVal = self_strategy.args['lambdaVal'] if 'lambdaVal' in self_strategy.args else 1
-        obj = submodlib.LogDeterminantMutualInformationFunction(n=unlabeled_data_embedding.shape[0],
-                                                                num_queries=query_embedding.shape[0],
+        obj = submodlib.ConcaveOverModularFunction(n=num_data,
+                                                   num_queries=num_queries, 
+                                                   query_sijs=query_sijs, 
+                                                   queryDiversityEta=eta,
+                                                   mode=ConcaveOverModular.logarithmic)
+    if(args['smi_function']=='gcmi'):
+        obj = submodlib.GraphCutMutualInformationFunction(n=num_data,
+                                                          num_queries=num_queries,
+                                                          query_sijs=query_sijs, 
+                                                          metric=metric)
+        
+    if(args['smi_function']=='logdetmi'):
+        lambdaVal = args['lambdaVal'] if 'lambdaVal' in args else 1
+        obj = submodlib.LogDeterminantMutualInformationFunction(n=num_data,
+                                                                num_queries=num_queries,
                                                                 data_sijs=data_sijs,  
                                                                 query_sijs=query_sijs,
                                                                 query_query_sijs=query_query_sijs,
@@ -193,8 +169,29 @@ class SMIAutoLabeler(Strategy):
         process_argument_list = []
         worker_pool = mp.Pool(processes=self.args['thread_count'])
 
-        for sel_class in range(self.target_classes):
-            process_argument_list.append((self, sel_class, budget, data_sijs, unlabeled_data_embedding))
+        for class_num in range(self.target_classes):
+            
+            # Get all points in the query set that have sel_class as a label
+            query_class_subset = get_class_subset(self.query_dataset, class_num)
+
+            # Compute the feature embedding of this subset
+            if(embedding_type == "gradients"):
+                query_embedding = self.get_grad_embedding(query_class_subset, False, gradType)
+            elif(embedding_type == "features"):
+                query_embedding = self.get_feature_embedding(query_class_subset, False, layer_name)
+            else:
+                raise ValueError("Provided representation must be one of gradients or features")
+
+            # Compute query-query kernel for LogDetMI if applicable
+            if(self.args['smi_function']=='logdetmi'):
+                query_query_sijs = submodlib.helper.create_kernel(X=query_embedding.cpu().numpy(), metric=metric, method="sklearn")
+            else:
+                query_query_sijs = None
+
+            # Compute image-query kernel. Always needed.
+            query_sijs = submodlib.helper.create_kernel(X=query_embedding.cpu().numpy(), X_rep=unlabeled_data_embedding.cpu().numpy(), metric=metric, method="sklearn")
+
+            process_argument_list.append((class_num, budget, self.target_classes, len(unlabeled_data_embedding), len(query_embedding), data_sijs, query_sijs, query_query_sijs, self.args))
 
         selected_idx = worker_pool.map(parallel_select, process_argument_list)
 
