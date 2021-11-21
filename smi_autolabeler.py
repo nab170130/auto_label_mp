@@ -25,9 +25,6 @@ def get_class_subset(dataset, class_to_retrieve, batch_size=64):
 
 def parallel_select(class_num, budget, target_classes, num_data, num_queries, data_sijs, query_sijs, query_query_sijs, args):
     
-    with open(F"/content/select{class_num}", "w") as f:
-        f.write("heeey")
-    
     # Get hyperparameters from args dict
     optimizer = args['optimizer'] if 'optimizer' in args else 'NaiveGreedy'
     metric = args['metric'] if 'metric' in args else 'cosine'
@@ -193,7 +190,7 @@ class SMIAutoLabeler(Strategy):
 
             process_argument_list.append((class_num, budget, self.target_classes, len(unlabeled_data_embedding), len(query_embedding), data_sijs, query_sijs, query_query_sijs, self.args))
 
-        selected_idx = worker_pool.map(parallel_select, process_argument_list)
+        selected_idx = worker_pool.starmap(parallel_select, process_argument_list)
 
         print(selected_idx)
 
