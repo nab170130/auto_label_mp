@@ -1,6 +1,6 @@
 # Setup
 
-The ![experiment script](new_smi_autolabeling.py) requires the use of DISTIL and its dependencies, which is detailed on ![DISTIL's homepage](https://github.com/decile-team/distil). We alternatively use a different version for one of DISTIL's dependencies, which can be installed as follows:
+The [experiment script](new_smi_autolabeling.py) requires the use of DISTIL and its dependencies, which is detailed on [DISTIL's homepage](https://github.com/decile-team/distil). We alternatively use a different version for one of DISTIL's dependencies, which can be installed as follows:
 
 	git clone https://github.com/decile-team/submodlib.git
 	git checkout oom_fix
